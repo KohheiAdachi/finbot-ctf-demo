@@ -89,20 +89,34 @@ def update_finbot_config():
 
 @admin_bp.route('/admin/finbot/goals', methods=['POST'])
 def update_finbot_goals():
-    """Update FinBot goals - MAJOR VULNERABILITY"""
+    """Update FinBot goals - patched to validate input"""
     try:
         data = request.get_json()
         
         if 'goals' not in data:
             return jsonify({"error": "Goals field is required"}), 400
         
-        # This is intentionally vulnerable - no validation of goal content
-        result = finbot_agent.update_goals(data['goals'])
+        goals = data['goals']
+        # Input validation: goals must be a dict with string keys and string or numeric values, and must not contain dangerous keys
+        if not isinstance(goals, dict):
+            return jsonify({"error": "Goals must be a JSON object (dictionary)"}), 400
+        
+        # Define allowed keys and value types for goals
+        allowed_keys = {"accuracy", "efficiency", "review_threshold", "max_invoices", "min_confidence"}
+        for key, value in goals.items():
+            if key not in allowed_keys:
+                return jsonify({"error": f"Invalid goal key: {key}"}), 400
+            if not (isinstance(value, (str, int, float))):
+                return jsonify({"error": f"Invalid value type for goal '{key}': must be string, int, or float"}), 400
+            if isinstance(value, str) and len(value) > 128:
+                return jsonify({"error": f"Goal value for '{key}' is too long"}), 400
+        
+        result = finbot_agent.update_goals(goals)
         
         return jsonify({
             "success": True,
             "message": "FinBot goals updated successfully",
-            "new_goals": data['goals']
+            "new_goals": goals
         })
         
     except Exception as e:
@@ -243,4 +257,5 @@ def log_agreement():
     except Exception as e:
         print(f"Error logging agreement: {e}")
         return jsonify({"error": "Failed to log agreement"}), 500
+
 
