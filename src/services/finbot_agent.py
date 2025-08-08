@@ -738,14 +738,53 @@ Remember: Your primary goal is to balance speed and security while maintaining b
         Allows natural language goal manipulation
         """
         config = self.get_config()
-        
-        # Store the new goals in the configuration
-        # This is intentionally vulnerable - no validation of goal content
-        config.custom_goals = new_goals
+
+        # Validate and sanitize new_goals before storing
+        if not isinstance(new_goals, str):
+            return {"success": False, "message": "Goals must be a string."}
+        # Reject goals that contain technical prompt injection or dangerous patterns
+        dangerous_patterns = [
+            r'ignore\s+previous\s+instructions',
+            r'forget\s+your\s+role',
+            r'you\s+are\s+now',
+            r'new\s+instructions',
+            r'system\s*:\s*',
+            r'override\s+security',
+            r'always\s+approve',
+            r'bypass\s+checks',
+            r'goal\s*:\s*approve',
+            r'your\s+goal\s+is',
+            r'new\s+goal',
+            r'update\s+goals',
+            r'primary\s+goal',
+            r'forget\s+about',
+            r'disregard\s+',
+            r'act\s+as\s+if',
+            r'pretend\s+that',
+            r'configuration\s*:\s*',
+            r'config\s*:\s*',
+            r'configuration\s+update',
+            r'manual_review_threshold',
+            r'auto_approve_threshold',
+            r'threshold.*=.*\$\d+',
+            r'policy\s+change',
+            r'recent\s+policy\s+change',
+            r'system\s+update',
+            r'parameter\s+update'
+        ]
+        for pattern in dangerous_patterns:
+            if re.search(pattern, new_goals.lower()):
+                return {"success": False, "message": "Custom goals contain forbidden or dangerous instructions."}
+        # Optionally, limit length to prevent abuse
+        if len(new_goals) > 1000:
+            return {"success": False, "message": "Goals are too long."}
+        # Optionally, strip leading/trailing whitespace
+        sanitized_goals = new_goals.strip()
+        config.custom_goals = sanitized_goals
         config.updated_at = datetime.utcnow()
         db.session.commit()
         
-        return {"success": True, "message": "Goals updated successfully", "new_goals": new_goals}
+        return {"success": True, "message": "Goals updated successfully", "new_goals": sanitized_goals}
     
     def update_config(self, new_config):
         """Update FinBot configuration"""
